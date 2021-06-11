@@ -1,15 +1,24 @@
-// the setup function runs once when you press reset or power the board
+  // arduino-cli compile --fqbn adafruit:samd:adafruit_feather_m0 sim7600_tracker
+  // arduino-cli upload --port /dev/ttyACM0 --fqbn adafruit:samd:adafruit_feather_m0 sim7600_tracker
+  // picocom /dev/ttyACM0 
+
 #define led_pin 13
 
 void setup() {
-  // initialize digital pin 13 as an output.
   pinMode(led_pin, OUTPUT);
+  Serial.begin(115200);
+  Serial1.begin(115200);
 }
 
 // the loop function runs over and over again forever
 void loop() {
-  digitalWrite(led_pin, HIGH);   // turn the LED on (HIGH is the voltage level)
-  delay(1000);              // wait for a second
-  digitalWrite(led_pin, LOW);    // turn the LED off by making the voltage LOW
-  delay(1000);              // wait for a second
+  char c;
+  while(Serial1.available()) {
+    c = Serial1.read();
+    Serial.print(c);
+  }
+  delay(3000);
+  Serial.println(".... uart test");
+  Serial1.println("AT\r");
+  digitalWrite(led_pin, !digitalRead(led_pin));
 }
