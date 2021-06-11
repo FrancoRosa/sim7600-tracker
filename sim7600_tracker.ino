@@ -5,6 +5,8 @@
 // picocom /dev/ttyACM0 
 // - - - - - - - - - - - - - - - - - - - - - - - 
 
+#include <FreeRTOS_SAMD21.h>
+
 #define led_pin 13
 
 const char domain[] = "iotnetwork.com.au:5055";
@@ -73,35 +75,55 @@ bool waitOk(int timeout) {
   while (timeout > t)   {
     t++;
     if (flagOK || flagERROR) {
-      delay(100);
+      vTaskDelay(100);
       return true;
     }
-    delay(100);
+    vTaskDelay(100);
   }
   mPower();
   return false;
 }
 
-
-
-void setup() {
-  pinMode(led_pin, OUTPUT);
-  Serial.begin(115200);
-  Serial1.begin(115200);
-}
-
-// get imei
 // get location
 // make post to server
 
-void loop() {
+static void task_rx_modem(void *pvParameters) {
   char c;
   while(Serial1.available()) {
     c = Serial1.read();
     Serial.print(c);
   }
-  delay(10000);
-  Serial.println(".... uart test");
-  sendCommand("GSN", 5);
-  digitalWrite(led_pin, !digitalRead(led_pin));
+}
+
+static void task_tx_modem(void *pvParameters) {
+  while (true) {
+    vTaskDelay(10000);
+    Serial.println(".... uart test");
+    sendCommand("GSN", 5);
+    digitalWrite(led_pin, !digitalRead(led_pin));
+  }
+}
+
+void setup() {
+  pinMode(led_pin, OUTPUT);
+  Serial.begin(115200);
+  Serial1.begin(115200);
+  xTaskCreate(
+    task_tx_modem,"txModem",
+    256,NULL,2,NULL
+  );
+  xTaskCreate(
+    task_rx_modem,"rxModem",
+    256,NULL,1,NULL
+  );
+  
+  vTaskStartScheduler();
+
+  while(true) {
+    Serial.println("Scheduler Failed! \n");
+    delay(1000);
+  }
+}
+
+void loop() {
 }
