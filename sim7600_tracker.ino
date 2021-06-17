@@ -8,7 +8,7 @@
 #include <FreeRTOS_SAMD21.h>
 
 #define led_pin 13
-#define key_pin 2
+#define key_pin 8
 // #define Modem Serial1
 // #define SerialUSB Serial
 
@@ -28,6 +28,7 @@ char modem_buffer[modem_size];    // Modem serial buffer
 char modem_output[modem_size];    // Modem serial buffer 
 char modem_char;                  // Modem serial char
 volatile int modem_i;            // Modem serial index
+volatile int edges[2];
 
 // - - - - - - - - - - - - - - - - - - - - - - - 
 const char mOK[]     = "OK";
@@ -48,6 +49,15 @@ const char mHUP[] = "ATH";  // when someones makes a call.. it should hang up
 
 TaskHandle_t Handle_rxTask;
 TaskHandle_t Handle_txTask;
+char latitude[11];
+char longitude[12];
+char date[6];
+char time[8];
+char ew_indicator[1];
+char ns_indicator[1];
+char altitude[6]; 
+char speed[6]; 
+char hdop[6]; 
 
 // - - - - - - - - Delay Helpers - - - - - - - - 
 void osDelayUs(int us) {
@@ -66,12 +76,36 @@ void osDelayS(int s) {
 }
 // - - - - - - - - - - - - - - - - - - - - - - - 
 
+int find_chr(const char *text, const int start, const char chr) {
+	char * pch;
+	pch = (char*) memchr (&text[start], chr, strlen(text));
+	if (pch != NULL) return min(pch - text, strlen(text)-1);
+}
+
+void find_edges(const char *text, int order, const char chr) {
+	int start = 0;
+	int end = 0;
+	int i = 0;
+	while ((find_chr(text, start, chr) != -1) && (i<=order)){
+		start = end;
+		end = find_chr(text, start+1, chr);
+		i++;
+	}
+	edges[0] = start == 0 ? start : start+1;
+	edges[1] = end - 1;
+}
+
+int split_chr(const char *text, const char chr, const int part) {
+	find_edges(text,part,chr);
+	return strtoi(text,edges[0],edges[1]);
+}
 
 void modemPower() {
   Serial.println("... restarting modem");
   digitalWrite(key_pin, LOW);
-  osDelayMs(500);
+  osDelayS(3);
   digitalWrite(key_pin, HIGH);
+  osDelayS(3);
 }
 
 // Read modem IMEI
@@ -89,9 +123,25 @@ void procCGN() {
   if (pch != NULL) {
     if (modem_buffer[12]=='2' || modem_buffer[12]=='3') { // if GNS is fixed
       flagGNS = true;
-      memmove(latitude , modem_buffer+33, 10); //JustPick lat and lon
-      memmove(longitude, modem_buffer+44, 10); //JustPick lat and lon
-      memmove(timestamp, modem_buffer+14, 18); //JustPick lat and lon
+      latitude = split_chr(in_buffer, ',', 1);
+      longitude = split_chr(in_buffer, ',', 1);
+      date = split_chr(in_buffer, ',', 1);
+      time = split_chr(in_buffer, ',', 1);
+      ew_indicator = split_chr(in_buffer, ',', 1);
+      ns_indicator = split_chr(in_buffer, ',', 1);
+      altitude = split_chr(in_buffer, ',', 1);
+      speed = split_chr(in_buffer, ',', 1);
+      hdop = split_chr(in_buffer, ',', 1);
+      Serial.println('... location proceced');
+      Serial.print('... latitude:'); Serial.println(latitude);
+      Serial.print('... longitude:'); Serial.println(longitude);
+      Serial.print('... date:'); Serial.println(date);
+      Serial.print('... time:'); Serial.println(time);
+      Serial.print('... ew_indicator:'); Serial.println(ew_indicator);
+      Serial.print('... ns_indicador:'); Serial.println(ns_indicador);
+      Serial.print('... altitude:'); Serial.println(altitude);
+      Serial.print('... speed:'); Serial.println(speed);
+      Serial.print('... hdop:'); Serial.println(hdop);
     } 
   }
 } 
@@ -120,7 +170,6 @@ bool waitOk(int timeout) {
   return false;
 }
 
-// get location
 // make post to server
 
 static void task_rx_modem(void *pvParameters) {
@@ -158,10 +207,10 @@ static void task_rx_modem(void *pvParameters) {
 
 static void task_tx_modem(void *pvParameters) {
   osDelayS(1);
+  modemPower();
   while (true) {
     Serial.println(".... uart test");
     sendCommand("GSN", 5);osDelayS(1);
-    // sendCommand("CGPS=1", 5);osDelayS(1);
     sendCommand("CGNSSINFO", 5);osDelayS(1);
     digitalWrite(led_pin, !digitalRead(led_pin));
     osDelayS(30);
