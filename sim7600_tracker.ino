@@ -65,25 +65,12 @@ void osDelayS(int s) {
   }  
 }
 // - - - - - - - - - - - - - - - - - - - - - - - 
-// - - - - - - - - Print helpers- - - - - - - - - 
-void printBuffer(Stream &serial, char *buffer) {
-  char c;
-  int i = 0;
-  int len = strlen(buffer);
-  while (true) {
-    c = buffer[i];
-    i++;
-    if (c == 0 || i > len) break;
-    serial.print(c);
-  }
-}
-// - - - - - - - - - - - - - - - - - - - - - - - 
 
 
 void modemPower() {
   Serial.println("... restarting modem");
   digitalWrite(key_pin, LOW);
-  osDelayS(1);
+  osDelayMs(500);
   digitalWrite(key_pin, HIGH);
 }
 
@@ -92,9 +79,22 @@ void procGSN() {
   Serial.println("... procesing GSN");
   memcpy(GSN, modem_buffer, 15);
   Serial.print("GSN: ");
-  Serial.print(GSN);
-  printBuffer(Serial, GSN);
+  Serial.println(GSN);
 }
+
+void procCGN() {
+  flagGNS = false;
+  char *pch;
+  pch = (char*) memchr(modem_buffer, ':', 10);
+  if (pch != NULL) {
+    if (modem_buffer[12]=='2' || modem_buffer[12]=='3') { // if GNS is fixed
+      flagGNS = true;
+      memmove(latitude , modem_buffer+33, 10); //JustPick lat and lon
+      memmove(longitude, modem_buffer+44, 10); //JustPick lat and lon
+      memmove(timestamp, modem_buffer+14, 18); //JustPick lat and lon
+    } 
+  }
+} 
 
 bool sendCommand(const char *command,int timeout) {
   Serial1.print("AT+");
@@ -124,6 +124,7 @@ bool waitOk(int timeout) {
 // make post to server
 
 static void task_rx_modem(void *pvParameters) {
+  osDelayS(1);
   while (true){
     while(Serial1.available()) {
       modem_char = Serial1.read();
@@ -144,7 +145,7 @@ static void task_rx_modem(void *pvParameters) {
           // if (memcmp(mCBC,   modem_buffer,4)==0) procCBC();
           // if (memcmp(mCSQ,   modem_buffer,4)==0) procCSQ();
           // if (memcmp(mCGR,   modem_buffer,4)==0) procCGR();
-          // if (memcmp(mCGN,   modem_buffer,4)==0) procCGN();
+          if (memcmp(mCGN,   modem_buffer,4)==0) procCGN();
           if (memcmp(mGSN,   modem_buffer,2)==0) procGSN();
           // if (memcmp(mCOP,   modem_buffer,4)==0) procCOP();
           modem_i=0;
@@ -156,16 +157,19 @@ static void task_rx_modem(void *pvParameters) {
 }
 
 static void task_tx_modem(void *pvParameters) {
-  modemPower(); 
+  osDelayS(1);
   while (true) {
-    osDelayS(10);
     Serial.println(".... uart test");
-    sendCommand("GSN", 5);
+    sendCommand("GSN", 5);osDelayS(1);
+    // sendCommand("CGPS=1", 5);osDelayS(1);
+    sendCommand("CGNSSINFO", 5);osDelayS(1);
     digitalWrite(led_pin, !digitalRead(led_pin));
+    osDelayS(30);
   }
 }
 
 void setup() {
+  delay(1000); // keep this to avoid USB crash
   pinMode(led_pin, OUTPUT);
   pinMode(key_pin, OUTPUT);
   digitalWrite(led_pin, HIGH);
@@ -173,6 +177,7 @@ void setup() {
   Serial.begin(115200);
   delay(1000); // keep this to avoid USB crash
   Serial1.begin(115200);
+  delay(1000); // keep this to avoid USB crash
   
   xTaskCreate(task_tx_modem, "txModem", 256, NULL, tskIDLE_PRIORITY + 2, &Handle_txTask);
   xTaskCreate(task_rx_modem, "rxModem", 256, NULL, tskIDLE_PRIORITY + 1, &Handle_rxTask);
@@ -185,5 +190,5 @@ void setup() {
 }
 
 void loop() {
-  osDelayUs(100);
+  delay(1000);
 }

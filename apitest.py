@@ -1,6 +1,7 @@
 #http://demo.traccar.org:5055/?id=123456&lat={0}&lon={1}&timestamp={2}&hdop={3}&altitude={4}&speed={5}
 from time import time
 
+# iotnetwork.com.au
 # user = admin
 # password = changethispassword
 
