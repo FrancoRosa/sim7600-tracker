@@ -20,12 +20,12 @@ volatile bool flagREG = false;
 volatile bool flagGNS = false;
 volatile bool flagHTTPACT = false;
 volatile bool flagDOWNLOAD = false;
+volatile bool flagProcessing = false;
 
 char GSN[]="000000000000000";
 
-const int modem_size = 120;       // Size of Modem serila buffer
+const int modem_size = 150;       // Size of Modem serila buffer
 char modem_buffer[modem_size];    // Modem serial buffer 
-char modem_output[modem_size];    // Modem serial buffer 
 char modem_char;                  // Modem serial char
 volatile int modem_i;            // Modem serial index
 volatile int edges[2];
@@ -34,8 +34,6 @@ volatile int edges[2];
 const char mOK[]     = "OK";
 const char mERROR[]  = "ERRO";
 const char mCLOSED[] = "CLOS";
-const char mSend[]   = "SEND OK";
-const char mConn[]   = "CONNECT OK";
 const char mCBC[] = "+CBC";
 const char mCOP[] = "+COP";
 const char mCSQ[] = "+CSQ";
@@ -49,15 +47,15 @@ const char mHUP[] = "ATH";  // when someones makes a call.. it should hang up
 
 TaskHandle_t Handle_rxTask;
 TaskHandle_t Handle_txTask;
-char latitude[11];
-char longitude[12];
-char date[6];
-char time[8];
-char ew_indicator[1];
-char ns_indicator[1];
-char altitude[6]; 
-char speed[6]; 
-char hdop[6]; 
+char latitude[]="0000.000000";
+char longitude[]="00000.000000";
+char date[7];
+char time[9];
+char lat_indicator[]= "0";
+char lng_indicator[]= "0";
+char altitude[7]; 
+char speed[7]; 
+char hdop[7]; 
 
 // - - - - - - - - Delay Helpers - - - - - - - - 
 void osDelayUs(int us) {
@@ -77,9 +75,11 @@ void osDelayS(int s) {
 // - - - - - - - - - - - - - - - - - - - - - - - 
 
 int find_chr(const char *text, const int start, const char chr) {
-	char * pch;
+  char * pch;
 	pch = (char*) memchr (&text[start], chr, strlen(text));
-	if (pch != NULL) return min(pch - text, strlen(text)-1);
+	if (pch != NULL) {
+    return min(pch - text, strlen(text)-1);
+  }
 }
 
 void find_edges(const char *text, int order, const char chr) {
@@ -91,57 +91,48 @@ void find_edges(const char *text, int order, const char chr) {
 		end = find_chr(text, start+1, chr);
 		i++;
 	}
-	edges[0] = start == 0 ? start : start+1;
-	edges[1] = end - 1;
+	edges[0] = start;
+	edges[1] = end;
 }
 
-int split_chr(const char *text, const char chr, const int part) {
-	find_edges(text,part,chr);
-	return strtoi(text,edges[0],edges[1]);
+void split_chr(char *destination, const char *source, const char chr, const int part) {
+	find_edges(source, part, chr);
+	int len = edges[1] - edges[0] - 1;
+  int i = 0;
+  while(i < len){
+    destination[i] = source[i + edges[0] + 1];
+    i++;
+  }
+  destination[i]=0;
 }
+
 
 void modemPower() {
-  Serial.println("... restarting modem");
-  digitalWrite(key_pin, LOW);
-  osDelayS(3);
-  digitalWrite(key_pin, HIGH);
-  osDelayS(3);
+  Serial.println("... restart modem");
+  digitalWrite(key_pin, LOW); osDelayS(3);
+  digitalWrite(key_pin, HIGH); osDelayS(10);
 }
 
 // Read modem IMEI
 void procGSN() {
-  Serial.println("... procesing GSN");
   memcpy(GSN, modem_buffer, 15);
-  Serial.print("GSN: ");
-  Serial.println(GSN);
+  Serial.print("... GSN: "); Serial.println(GSN);
 }
 
 void procCGN() {
   flagGNS = false;
-  char *pch;
-  pch = (char*) memchr(modem_buffer, ':', 10);
-  if (pch != NULL) {
+  if (modem_buffer[10]==':') {
     if (modem_buffer[12]=='2' || modem_buffer[12]=='3') { // if GNS is fixed
       flagGNS = true;
-      latitude = split_chr(in_buffer, ',', 1);
-      longitude = split_chr(in_buffer, ',', 1);
-      date = split_chr(in_buffer, ',', 1);
-      time = split_chr(in_buffer, ',', 1);
-      ew_indicator = split_chr(in_buffer, ',', 1);
-      ns_indicator = split_chr(in_buffer, ',', 1);
-      altitude = split_chr(in_buffer, ',', 1);
-      speed = split_chr(in_buffer, ',', 1);
-      hdop = split_chr(in_buffer, ',', 1);
-      Serial.println('... location proceced');
-      Serial.print('... latitude:'); Serial.println(latitude);
-      Serial.print('... longitude:'); Serial.println(longitude);
-      Serial.print('... date:'); Serial.println(date);
-      Serial.print('... time:'); Serial.println(time);
-      Serial.print('... ew_indicator:'); Serial.println(ew_indicator);
-      Serial.print('... ns_indicador:'); Serial.println(ns_indicador);
-      Serial.print('... altitude:'); Serial.println(altitude);
-      Serial.print('... speed:'); Serial.println(speed);
-      Serial.print('... hdop:'); Serial.println(hdop);
+      split_chr(latitude, modem_buffer, ',', 4);      Serial.print("... latitude: ");      Serial.println(latitude);
+      split_chr(longitude, modem_buffer, ',', 6);     Serial.print("... longitude: ");     Serial.println(longitude);
+      split_chr(lat_indicator, modem_buffer, ',', 5); Serial.print("... lat_indicator: "); Serial.println(lat_indicator);
+      split_chr(lng_indicator, modem_buffer, ',', 7); Serial.print("... lng_indicador: "); Serial.println(lng_indicator);
+      split_chr(date, modem_buffer, ',', 8);          Serial.print("... date: ");          Serial.println(date);
+      split_chr(time, modem_buffer, ',', 9);          Serial.print("... time: ");          Serial.println(time);
+      split_chr(altitude, modem_buffer, ',', 10);     Serial.print("... altitude: ");      Serial.println(altitude);
+      split_chr(speed, modem_buffer, ',', 11);        Serial.print("... speed: ");         Serial.println(speed);
+      split_chr(hdop, modem_buffer, ',', 14);         Serial.print("... hdop: ");          Serial.println(hdop);
     } 
   }
 } 
@@ -173,9 +164,8 @@ bool waitOk(int timeout) {
 // make post to server
 
 static void task_rx_modem(void *pvParameters) {
-  osDelayS(1);
-  while (true){
-    while(Serial1.available()) {
+  while (true) {
+    while(Serial1.available() && !flagProcessing) {
       modem_char = Serial1.read();
       Serial.print(modem_char);
       modem_buffer[modem_i] = modem_char;
@@ -184,6 +174,7 @@ static void task_rx_modem(void *pvParameters) {
       // if (modem_char=='>') flagPromt = true;
       if ((modem_i >= 2) && ((modem_char == '\n') || (modem_char == '\n')))
         {
+          flagProcessing = true;
           modem_buffer[modem_i]='\0';
           if (memcmp(mOK,    modem_buffer,2)==0) flagOK=true;
           // if (memcmp(mERROR, modem_buffer,4)==0) flagERROR=true;
@@ -195,25 +186,27 @@ static void task_rx_modem(void *pvParameters) {
           // if (memcmp(mCSQ,   modem_buffer,4)==0) procCSQ();
           // if (memcmp(mCGR,   modem_buffer,4)==0) procCGR();
           if (memcmp(mCGN,   modem_buffer,4)==0) procCGN();
-          if (memcmp(mGSN,   modem_buffer,2)==0) procGSN();
+          if (memcmp(mGSN,   modem_buffer,4)==0) procGSN();
           // if (memcmp(mCOP,   modem_buffer,4)==0) procCOP();
           modem_i=0;
-          for(int i = 0; i < modem_size; i++) modem_buffer[i]=0; 
+          for(int i = 0; i < modem_size; i++) modem_buffer[i]=0;
+          flagProcessing = false;
         }
     }
-   osDelayMs(1);
+   osDelayUs(1);
   }
 }
 
 static void task_tx_modem(void *pvParameters) {
-  osDelayS(1);
-  modemPower();
   while (true) {
     Serial.println(".... uart test");
-    sendCommand("GSN", 5);osDelayS(1);
-    sendCommand("CGNSSINFO", 5);osDelayS(1);
-    digitalWrite(led_pin, !digitalRead(led_pin));
-    osDelayS(30);
+    Serial.println(latitude);
+    Serial.println(longitude);
+    if (sendCommand("GSN", 3)) {
+      sendCommand("CGNSSINFO", 10);
+      digitalWrite(led_pin, !digitalRead(led_pin));
+    }
+    osDelayS(10);
   }
 }
 
@@ -223,13 +216,13 @@ void setup() {
   pinMode(key_pin, OUTPUT);
   digitalWrite(led_pin, HIGH);
   digitalWrite(key_pin, HIGH);
-  Serial.begin(115200);
+  Serial.begin(230400);
   delay(1000); // keep this to avoid USB crash
   Serial1.begin(115200);
   delay(1000); // keep this to avoid USB crash
   
-  xTaskCreate(task_tx_modem, "txModem", 256, NULL, tskIDLE_PRIORITY + 2, &Handle_txTask);
-  xTaskCreate(task_rx_modem, "rxModem", 256, NULL, tskIDLE_PRIORITY + 1, &Handle_rxTask);
+  xTaskCreate(task_tx_modem, "txModem", 512, NULL, tskIDLE_PRIORITY + 2, &Handle_txTask);
+  xTaskCreate(task_rx_modem, "rxModem", 512, NULL, tskIDLE_PRIORITY + 1, &Handle_rxTask);
   vTaskStartScheduler();
 
   while(true) {
@@ -240,4 +233,5 @@ void setup() {
 
 void loop() {
   delay(1000);
+  
 }
