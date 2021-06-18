@@ -19,6 +19,9 @@ url = "http://%s:%d/?id=%d&lat=%s&lon=%s&timestamp=%d&hdop=%d&altitude=%d&speed=
   domain,port,id,latitude,longitude,timestamp,hdop,altitude,speed
 )
  
+print(url)
+
 response = requests.post(url)
 print(response)
 
+# http://iotnetwork.com.au:5055/?id=863922031635619&lat=-13.20416&lon=-72.20898&timestamp=1624031099&hdop=12&altitude=3400&speed=10

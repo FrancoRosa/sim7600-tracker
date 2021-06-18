@@ -12,7 +12,7 @@
 // #define Modem Serial1
 // #define SerialUSB Serial
 
-const char domain[] = "iotnetwork.com.au:5055";
+const char domain[] = "http://iotnetwork.com.au:5055/";
 
 volatile bool flagOK = false;
 volatile bool flagERROR = false;
@@ -26,6 +26,7 @@ char GSN[]="000000000000000";
 
 const int modem_size = 150;       // Size of Modem serila buffer
 char modem_buffer[modem_size];    // Modem serial buffer 
+char url_buffer[modem_size];    // Modem serial buffer 
 char modem_char;                  // Modem serial char
 volatile int modem_i;            // Modem serial index
 volatile int edges[2];
@@ -40,22 +41,27 @@ const char mCSQ[] = "+CSQ";
 const char mCGR[] = "+CGR";
 const char mIPC[] = "+IPC";
 const char mCGN[] = "+CGN";
-const char mGSN[] = "86";   // this is SIMCOMS id found on serial number
+const char mGSN[] = "8639";   // this is SIMCOMS id found on serial number
 const char mRIN[] = "RING"; // when someones makes a call.. it should hang up
 const char mHUP[] = "ATH";  // when someones makes a call.. it should hang up
 // - - - - - - - - - - - - - - - - - - - - - - - 
 
 TaskHandle_t Handle_rxTask;
 TaskHandle_t Handle_txTask;
-char latitude[]="0000.000000";
-char longitude[]="00000.000000";
+char latitude[13];
+char longitude[13];
 char date[7];
 char time[9];
-char lat_indicator[]= "0";
-char lng_indicator[]= "0";
+char lat_indicator[2];
+char lng_indicator[2];
 char altitude[7]; 
 char speed[7]; 
-char hdop[7]; 
+char hdop[7];
+int timestamp = 1624031494587;
+ 
+
+volatile float lat;
+volatile float lng;
 
 // - - - - - - - - Delay Helpers - - - - - - - - 
 void osDelayUs(int us) {
@@ -119,6 +125,13 @@ void procGSN() {
   Serial.print("... GSN: "); Serial.println(GSN);
 }
 
+float to_geo(char *coordinate, char *indicator) {
+  float val = atof(coordinate);
+  val = val / 100.0;
+  if (indicator[0] == 'S' || indicator[0] == 'W') val = 0 - val;
+  return val;
+}
+
 void procCGN() {
   flagGNS = false;
   if (modem_buffer[10]==':') {
@@ -128,6 +141,8 @@ void procCGN() {
       split_chr(longitude, modem_buffer, ',', 6);     Serial.print("... longitude: ");     Serial.println(longitude);
       split_chr(lat_indicator, modem_buffer, ',', 5); Serial.print("... lat_indicator: "); Serial.println(lat_indicator);
       split_chr(lng_indicator, modem_buffer, ',', 7); Serial.print("... lng_indicador: "); Serial.println(lng_indicator);
+      lat = to_geo(latitude, lat_indicator);          Serial.print("... lat: ");           Serial.println(lat,6);
+      lng = to_geo(longitude, lng_indicator);         Serial.print("... lng: ");           Serial.println(lng,6);
       split_chr(date, modem_buffer, ',', 8);          Serial.print("... date: ");          Serial.println(date);
       split_chr(time, modem_buffer, ',', 9);          Serial.print("... time: ");          Serial.println(time);
       split_chr(altitude, modem_buffer, ',', 10);     Serial.print("... altitude: ");      Serial.println(altitude);
@@ -161,7 +176,14 @@ bool waitOk(int timeout) {
   return false;
 }
 
-// make post to server
+void create_url() {
+  // http://iotnetwork.com.au:5055/?id=863922031635619&lat=-13.20416&lon=-72.20898&timestamp=1624031099&hdop=12&altitude=3400&speed=10
+  sprintf(
+    url_buffer,
+    "%s?id=%s&lat=%.6f&lon=%.6f&timestamp=%d&hdop=%s&altitude=%s&speed=%s",
+    domain, GSN, lat, lng, timestamp, hdop, altitude, speed
+  );
+}
 
 static void task_rx_modem(void *pvParameters) {
   while (true) {
@@ -205,6 +227,11 @@ static void task_tx_modem(void *pvParameters) {
     if (sendCommand("GSN", 3)) {
       sendCommand("CGNSSINFO", 10);
       digitalWrite(led_pin, !digitalRead(led_pin));
+    }
+    if (flagGNS) {
+      create_url();
+      Serial.print("url: ");
+      Serial.println(url_buffer);
     }
     osDelayS(10);
   }
