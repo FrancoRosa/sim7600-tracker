@@ -6,6 +6,7 @@
 // - - - - - - - - - - - - - - - - - - - - - - - 
 
 #include <FreeRTOS_SAMD21.h>
+#include <avr/dtostrf.h>
 
 #define led_pin 13
 #define key_pin 8
@@ -24,9 +25,10 @@ volatile bool flagProcessing = false;
 
 char GSN[]="000000000000000";
 
-const int modem_size = 150;       // Size of Modem serila buffer
+const int modem_size = 180;       // Size of Modem serila buffer
 char modem_buffer[modem_size];    // Modem serial buffer 
 char url_buffer[modem_size];    // Modem serial buffer 
+char command_buffer[modem_size];    // Modem serial buffer 
 char modem_char;                  // Modem serial char
 volatile int modem_i;            // Modem serial index
 volatile int edges[2];
@@ -57,7 +59,7 @@ char lng_indicator[2];
 char altitude[7]; 
 char speed[7]; 
 char hdop[7];
-int timestamp = 1624031494587;
+char timestamp[] = "1624031494587";
  
 
 volatile float lat;
@@ -143,6 +145,8 @@ void procCGN() {
       split_chr(lng_indicator, modem_buffer, ',', 7); Serial.print("... lng_indicador: "); Serial.println(lng_indicator);
       lat = to_geo(latitude, lat_indicator);          Serial.print("... lat: ");           Serial.println(lat,6);
       lng = to_geo(longitude, lng_indicator);         Serial.print("... lng: ");           Serial.println(lng,6);
+      dtostrf(lat, 7, 6, latitude);
+      dtostrf(lng, 7, 6, longitude);
       split_chr(date, modem_buffer, ',', 8);          Serial.print("... date: ");          Serial.println(date);
       split_chr(time, modem_buffer, ',', 9);          Serial.print("... time: ");          Serial.println(time);
       split_chr(altitude, modem_buffer, ',', 10);     Serial.print("... altitude: ");      Serial.println(altitude);
@@ -180,9 +184,32 @@ void create_url() {
   // http://iotnetwork.com.au:5055/?id=863922031635619&lat=-13.20416&lon=-72.20898&timestamp=1624031099&hdop=12&altitude=3400&speed=10
   sprintf(
     url_buffer,
-    "%s?id=%s&lat=%.6f&lon=%.6f&timestamp=%d&hdop=%s&altitude=%s&speed=%s",
-    domain, GSN, lat, lng, timestamp, hdop, altitude, speed
+    "%s?id=%s&lat=%s&lon=%s&timestamp=%s&hdop=%s&altitude=%s&speed=%s",
+    domain, GSN, latitude, longitude, timestamp, hdop, altitude, speed
   );
+}
+
+void create_command() {
+  // http://iotnetwork.com.au:5055/?id=863922031635619&lat=-13.20416&lon=-72.20898&timestamp=1624031099&hdop=12&altitude=3400&speed=10
+  sprintf(
+    command_buffer,
+    "HTTPPARA=\"URL\",\"%s\"",
+    url_buffer
+  );
+}
+
+void initHTTP(){
+  sendCommand("HTTPINIT", 3);
+}
+
+void postHTTP(){
+  create_command();
+  sendCommand(command_buffer, 5);
+  sendCommand("HTTPACTION=1", 15);
+}
+
+void stopHTTP(){
+  sendCommand("HTTPTERM", 3);
 }
 
 static void task_rx_modem(void *pvParameters) {
@@ -222,18 +249,19 @@ static void task_rx_modem(void *pvParameters) {
 static void task_tx_modem(void *pvParameters) {
   while (true) {
     Serial.println(".... uart test");
-    Serial.println(latitude);
-    Serial.println(longitude);
     if (sendCommand("GSN", 3)) {
+      sendCommand("CMEE=2", 10);
       sendCommand("CGNSSINFO", 10);
       digitalWrite(led_pin, !digitalRead(led_pin));
     }
     if (flagGNS) {
       create_url();
-      Serial.print("url: ");
-      Serial.println(url_buffer);
+      initHTTP();
+      postHTTP();
+      osDelayS(10);
+      stopHTTP();
     }
-    osDelayS(10);
+    osDelayS(50);
   }
 }
 
