@@ -128,10 +128,24 @@ void procGSN() {
 }
 
 float to_geo(char *coordinate, char *indicator) {
-  float val = atof(coordinate);
-  val = val / 100.0;
-  if (indicator[0] == 'S' || indicator[0] == 'W') val = 0 - val;
-  return val;
+  char d_str[5]; 
+  char m_str[12];
+  int len = strlen(coordinate);
+  if (len == 11) {
+    memcpy(d_str, coordinate, 2);
+    memmove(coordinate, coordinate+2, 9);
+  } 
+  if (len == 12) {
+    memcpy(d_str, coordinate, 3);
+    memmove(coordinate, coordinate+3, 9);
+  }
+  memcpy(m_str, coordinate, 9);
+  float deg = atof(d_str);
+  float min = atof(m_str);
+  deg = deg + min / 60.0;
+
+  if (indicator[0] == 'S' || indicator[0] == 'W') deg = 0 - deg;
+  return deg;
 }
 
 void procCGN() {
