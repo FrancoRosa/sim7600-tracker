@@ -52,14 +52,13 @@ TaskHandle_t Handle_rxTask;
 TaskHandle_t Handle_txTask;
 char latitude[13];
 char longitude[13];
-char date[7];
+char date[12];
 char time[9];
 char lat_indicator[2];
 char lng_indicator[2];
 char altitude[7]; 
 char speed[7]; 
 char hdop[7];
-char timestamp[] = "1624031494587";
  
 
 volatile float lat;
@@ -148,6 +147,41 @@ float to_geo(char *coordinate, char *indicator) {
   return deg;
 }
 
+void to_date(char *date) {
+  // input: 190621
+  // output: 2021-06-21
+  char temp[12];
+  temp[0] = '2';
+  temp[1] = '0';
+  temp[2] = date[4];
+  temp[3] = date[5];
+  temp[4] = '-';
+  temp[5] = date[2];
+  temp[6] = date[3];
+  temp[7] = '-';
+  temp[8] = date[0];
+  temp[9] = date[1];
+  temp[10] = 0;
+  memcpy(date, temp, 11);
+}
+
+void to_time(char *time) {
+  // input: 035032.0
+  // output: 03:50:32
+  char temp[10];
+  temp[0] = time[0];
+  temp[1] = time[1];
+  temp[2] = ':';
+  temp[3] = time[2];
+  temp[4] = time[3];
+  temp[5] = ':';
+  temp[6] = time[4];
+  temp[7] = time[5];
+  temp[10] = 0;
+  memcpy(time, temp, 10);
+
+}
+
 void procCGN() {
   flagGNS = false;
   if (modem_buffer[10]==':') {
@@ -163,9 +197,12 @@ void procCGN() {
       dtostrf(lng, 7, 6, longitude);
       split_chr(date, modem_buffer, ',', 8);          Serial.print("... date: ");          Serial.println(date);
       split_chr(time, modem_buffer, ',', 9);          Serial.print("... time: ");          Serial.println(time);
+      to_date(date);                                  Serial.print("... date: ");          Serial.println(date);
+      to_time(time);                                  Serial.print("... time: ");          Serial.println(time);
       split_chr(altitude, modem_buffer, ',', 10);     Serial.print("... altitude: ");      Serial.println(altitude);
       split_chr(speed, modem_buffer, ',', 11);        Serial.print("... speed: ");         Serial.println(speed);
       split_chr(hdop, modem_buffer, ',', 14);         Serial.print("... hdop: ");          Serial.println(hdop);
+      
     } 
   }
 } 
@@ -198,8 +235,8 @@ void create_url() {
   // http://iotnetwork.com.au:5055/?id=863922031635619&lat=-13.20416&lon=-72.20898&timestamp=1624031099&hdop=12&altitude=3400&speed=10
   sprintf(
     url_buffer,
-    "%s?id=%s&lat=%s&lon=%s&timestamp=%s&hdop=%s&altitude=%s&speed=%s",
-    domain, GSN, latitude, longitude, timestamp, hdop, altitude, speed
+    "%s?id=%s&lat=%s&lon=%s&timestamp=%s%%20%s&hdop=%s&altitude=%s&speed=%s",
+    domain, GSN, latitude, longitude, date, time, hdop, altitude, speed
   );
 }
 
