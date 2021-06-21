@@ -65,6 +65,7 @@ AT+CSMS=0|OK|Select SMS service
 AT+CPMS="ME","ME","ME"|OK|Select SMS storage
 AT+CMGF=1|OK|Select SMS text format
 AT+CNMI=2,1|OK|Show SMS when it comes
+AT+CMGRD=0|OK|Read and Delete SMS
 AT+CNMA|OK|Send ACK to SMS sender
 AT+CGNSSINFO|+CGNSSINFO: 2,06,03,00,3426.693019,S,15051.184731,E,170521,034216.0,46.5,0.0,0.0,1.2,0.9,0.9|
 |GNSS Data|
