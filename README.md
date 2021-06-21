@@ -56,6 +56,19 @@ E|<E/W>| E/W Indicator, E=east or W=west
 0.9|<VDOP>| Vertical Dilution Of Precision
 
 
+## SMS Commands Abstract
+[AT commands reference](http://mt-system.ru/sites/default/files/documents/sim7500_sim7600_series_at_command_manual_v2.00.pdf)
+
+Command|Response|Description
+-----|-----|-----
+AT+CSMS=0|OK|Select SMS service
+AT+CPMS="ME","ME","ME"|OK|Select SMS storage
+AT+CMGF=1|OK|Select SMS text format
+AT+CNMI=2,1|OK|Show SMS when it comes
+AT+CNMA|OK|Send ACK to SMS sender
+AT+CGNSSINFO|+CGNSSINFO: 2,06,03,00,3426.693019,S,15051.184731,E,170521,034216.0,46.5,0.0,0.0,1.2,0.9,0.9|
+|GNSS Data|
+
 
 ## Usefull extra commands
 [AT commands reference](http://mt-system.ru/sites/default/files/documents/sim7500_sim7600_series_at_command_manual_v2.00.pdf)
@@ -75,5 +88,3 @@ AT+CFUN=6||Reset device
 
 ## Hardware Design
 [Hardware Design](https://simcom.ee/documents/SIM7600E/SIM7600%20Series%20Hardware%20Design_V1.03.pdf)
-
-AT+HTTPPARA="URL","http://www.sim.com"

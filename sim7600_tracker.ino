@@ -13,7 +13,7 @@
 // #define Modem Serial1
 // #define SerialUSB Serial
 
-const char domain[] = "http://iotnetwork.com.au:5055/";
+const char domain[] = "http://iotnetwork.com.au:5055";
 
 volatile bool flagOK = false;
 volatile bool flagERROR = false;
@@ -262,6 +262,8 @@ void postHTTP(){
 void stopHTTP(){
   sendCommand("HTTPTERM", 3);
 }
+
+
 
 static void task_rx_modem(void *pvParameters) {
   while (true) {
