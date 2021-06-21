@@ -13,7 +13,7 @@
 // #define Modem Serial1
 // #define SerialUSB Serial
 
-const char domain[] = "http://iotnetwork.com.au:5055";
+const char domain[] = "http://iotnetwork.com.au:5055/";
 
 volatile bool flagOK = false;
 volatile bool flagERROR = false;
@@ -263,7 +263,13 @@ void stopHTTP(){
   sendCommand("HTTPTERM", 3);
 }
 
-
+bool smsConfig(){
+  bool result = sendCommand("CSMS=0", 5) && 
+  sendCommand("CPMS=\"ME\",\"ME\",\"ME\"", 5) &&
+  sendCommand("CMGF=1", 5) &&
+  sendCommand("CNMI=2,2", 5);
+  return result;
+}
 
 static void task_rx_modem(void *pvParameters) {
   while (true) {
@@ -301,8 +307,8 @@ static void task_rx_modem(void *pvParameters) {
 
 static void task_tx_modem(void *pvParameters) {
   while (true) {
-    Serial.println(".... uart test");
-    if (sendCommand("GSN", 3)) {
+    if (smsConfig()) {
+      sendCommand("GSN", 3);
       sendCommand("CMEE=2", 10);
       sendCommand("CGNSSINFO", 10);
       digitalWrite(led_pin, !digitalRead(led_pin));
