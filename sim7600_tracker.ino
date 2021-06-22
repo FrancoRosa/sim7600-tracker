@@ -7,13 +7,10 @@
 
 #include <FreeRTOS_SAMD21.h>
 #include <avr/dtostrf.h>
+#include <FlashStorage.h>
 
 #define led_pin 13
 #define key_pin 8
-// #define Modem Serial1
-// #define SerialUSB Serial
-
-const char domain[] = "http://iotnetwork.com.au:5055/";
 
 volatile bool flagOK = false;
 volatile bool flagERROR = false;
@@ -23,8 +20,6 @@ volatile bool flagHTTPACT = false;
 volatile bool flagDOWNLOAD = false;
 volatile bool flagProcessing = false;
 
-char GSN[]="000000000000000";
-
 const int modem_size = 180;       // Size of Modem serila buffer
 char modem_buffer[modem_size];    // Modem serial buffer 
 char url_buffer[modem_size];    // Modem serial buffer 
@@ -33,6 +28,7 @@ char modem_char;                  // Modem serial char
 volatile int modem_i;            // Modem serial index
 volatile int edges[2];
 
+char memory[20][modem_size];
 // - - - - - - - - - - - - - - - - - - - - - - - 
 const char mOK[]     = "OK";
 const char mERROR[]  = "ERRO";
@@ -59,10 +55,43 @@ char lng_indicator[2];
 char altitude[7]; 
 char speed[7]; 
 char hdop[7];
- 
+char GSN[17];
 
 volatile float lat;
 volatile float lng;
+
+typedef struct {
+  char server[100];
+  int stationary_period;
+  int logging_period;
+  int upload_period;
+  bool recovery;
+  bool valid;
+} Config;
+
+FlashStorage(storage, Config);
+
+Config settings;
+
+void checkConfig(){
+  settings = storage.read();
+  if (settings.valid) {
+    Serial.print("... settings found");
+  } 
+  else {
+    Serial.print("... settings not found");
+    const char default_domain[] = "http://iotnetwork.com.au:5055/";
+    memcpy(settings.server, default_domain, strlen(default_domain));
+    settings.stationary_period = 600;
+    settings.logging_period = 20;
+    settings.upload_period = 240;
+    settings.recovery = false;
+    settings.valid = true;
+    storage.write(settings);
+    Serial.print("... settings saved");
+
+  }
+}
 
 // - - - - - - - - Delay Helpers - - - - - - - - 
 void osDelayUs(int us) {
@@ -236,7 +265,7 @@ void create_url() {
   sprintf(
     url_buffer,
     "%s?id=%s&lat=%s&lon=%s&timestamp=%s%%20%s&hdop=%s&altitude=%s&speed=%s",
-    domain, GSN, latitude, longitude, date, time, hdop, altitude, speed
+    settings.server, GSN, latitude, longitude, date, time, hdop, altitude, speed
   );
 }
 
@@ -249,21 +278,21 @@ void create_command() {
   );
 }
 
-void initHTTP(){
+void initHTTP() {
   sendCommand("HTTPINIT", 3);
 }
 
-void postHTTP(){
+void postHTTP() {
   create_command();
   sendCommand(command_buffer, 5);
   sendCommand("HTTPACTION=1", 15);
 }
 
-void stopHTTP(){
+void stopHTTP() {
   sendCommand("HTTPTERM", 3);
 }
 
-bool smsConfig(){
+bool smsConfig() {
   bool result = sendCommand("CSMS=0", 5) && 
   sendCommand("CPMS=\"ME\",\"ME\",\"ME\"", 5) &&
   sendCommand("CMGF=1", 5) &&
@@ -290,12 +319,8 @@ static void task_rx_modem(void *pvParameters) {
           // if (memcmp(mSend,  modem_buffer,6)==0) flagSend=true;
           // if (memcmp(mConn,  modem_buffer,9)==0) flagConn=true;
           // if (memcmp(mRIN,   modem_buffer,4)==0) flagRIN=true;
-          // if (memcmp(mCBC,   modem_buffer,4)==0) procCBC();
-          // if (memcmp(mCSQ,   modem_buffer,4)==0) procCSQ();
-          // if (memcmp(mCGR,   modem_buffer,4)==0) procCGR();
           if (memcmp(mCGN,   modem_buffer,4)==0) procCGN();
           if (memcmp(mGSN,   modem_buffer,4)==0) procGSN();
-          // if (memcmp(mCOP,   modem_buffer,4)==0) procCOP();
           modem_i=0;
           for(int i = 0; i < modem_size; i++) modem_buffer[i]=0;
           flagProcessing = false;
@@ -334,7 +359,7 @@ void setup() {
   delay(1000); // keep this to avoid USB crash
   Serial1.begin(115200);
   delay(1000); // keep this to avoid USB crash
-  
+  checkConfig();
   xTaskCreate(task_tx_modem, "txModem", 512, NULL, tskIDLE_PRIORITY + 2, &Handle_txTask);
   xTaskCreate(task_rx_modem, "rxModem", 512, NULL, tskIDLE_PRIORITY + 1, &Handle_rxTask);
   vTaskStartScheduler();
@@ -347,5 +372,28 @@ void setup() {
 
 void loop() {
   delay(1000);
-  
 }
+
+// find for domain on memory, if not give default.
+// find for interval on memory, if not, give default.
+
+// Add interval counter and flag
+
+// Stationary Heartbeat - Minutes
+// Motion Logging rate - seconds
+// Motion upload rate - minutes
+// recovery mode, upload every 10s
+
+// set recovery mode flag
+
+// get RTC from IC
+
+// save positions and send at once
+
+// Variables to save in memory 
+// #*,SERVER,http://iotnetwork.com.au:5055/
+// #*,RECOVERY,true
+// #*,RECOVERY,false
+// #*,STATIONARY,1
+// #*,LOGGING,30
+// #*,UPLOAD,5
