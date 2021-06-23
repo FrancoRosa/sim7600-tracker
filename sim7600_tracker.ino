@@ -259,8 +259,12 @@ void procSMS() {
   const char sREC[] = "reco";
   char sms_command[12];
   char sms_value[100];
+  Serial.println("... processing SMS");
+
   split_chr(sms_command, modem_buffer, ',', 1);
   split_chr(sms_value, modem_buffer, ',', 2);
+  Serial.println("... ");Serial.println(sms_command);
+  Serial.println("... ");Serial.println(sms_value);
   if (memcmp(sSER, sms_command, 4) == 0) memcpy(settings.server, sms_value, strlen(sms_value));
   if (memcmp(sSTA, sms_command, 4) == 0) settings.stationary_period = atoi(sms_value);
   if (memcmp(sLOG, sms_command, 4) == 0) settings.logging_period = atoi(sms_value);
