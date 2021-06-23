@@ -44,6 +44,7 @@ const char mGSN[] = "8639";   // this is SIMCOMS id found on serial number
 const char mRIN[] = "RING"; // when someones makes a call.. it should hang up
 const char mHUP[] = "ATH";  // when someones makes a call.. it should hang up
 const char mHTTP[] = "+HTTP";
+const char mSMS[] = "#*,";
 // - - - - - - - - - - - - - - - - - - - - - - - 
 
 TaskHandle_t Handle_rxTask;
@@ -242,6 +243,37 @@ void procCGN() {
       spd = atof(speed);                              Serial.print("... spd: ");           Serial.println(spd);
     } 
   }
+}
+
+void procSMS() {
+  // incomming SMS for configuration purposes, examples:
+  // #*,server,http://iotnetwork.com.au:5055/,
+  // #*,stationary,300,
+  // #*,logging,20,
+  // #*,upload,300,
+  // #*,recovery,1,
+  const char sSER[] = "serv";
+  const char sSTA[] = "stat";
+  const char sLOG[] = "logg";
+  const char sUPL[] = "uplo";
+  const char sREC[] = "reco";
+  char sms_command[12];
+  char sms_value[100];
+  split_chr(sms_command, modem_buffer, ',', 1);
+  split_chr(sms_value, modem_buffer, ',', 2);
+  if (memcmp(sSER, sms_command, 4) == 0) memcpy(settings.server, sms_value, strlen(sms_value));
+  if (memcmp(sSTA, sms_command, 4) == 0) settings.stationary_period = atoi(sms_value);
+  if (memcmp(sLOG, sms_command, 4) == 0) settings.logging_period = atoi(sms_value);
+  if (memcmp(sUPL, sms_command, 4) == 0) settings.upload_period = atoi(sms_value);
+  if (memcmp(sREC, sms_command, 4) == 0) settings.recovery = atoi(sms_value);
+  storage.write(settings);
+  Serial.println("... new settings found");
+  Serial.print("... server: ");     Serial.println(settings.server);
+  Serial.print("... stationary: "); Serial.println(settings.stationary_period);
+  Serial.print("... logging: ");    Serial.println(settings.logging_period);
+  Serial.print("... upload: ");     Serial.println(settings.upload_period);
+  Serial.print("... recovery: ");   Serial.println(settings.recovery);
+  Serial.println("... settings saved");
 } 
 
 bool sendCommand(const char *command,int timeout) {
@@ -272,7 +304,7 @@ void create_command() {
   // http://iotnetwork.com.au:5055/?id=863922031635619&lat=-13.20416&lon=-72.20898&timestamp=1624031099&hdop=12&altitude=3400&speed=10
   sprintf(
     command_buffer,
-    "HTTPPARA=\"URL\",\"%s?id=%s&lat=%s&lon=%s&timestamp=%s%%20%s&hdop=%s&altitude=%s&speed=%s&course=%s\"",
+    "HTTPPARA=\"URL\",\"%s?id=%s&lat=%s&lon=%s&timestamp=%s%%20%s&hdop=%s&altitude=%s&speed=%s&heading=%s\"",
     settings.server, GSN, latitude, longitude, date, time, hdop, altitude, speed, course
   );
 }
@@ -361,6 +393,7 @@ static void task_rx_modem(void *pvParameters) {
           if (memcmp(mOK,   modem_buffer,2)==0) flagOK=true;
           if (memcmp(mERROR,modem_buffer,4)==0) flagERROR=true;
           if (memcmp(mHTTP, modem_buffer,4)==0) flagHTTP=true;
+          if (memcmp(mSMS,  modem_buffer,3)==0) procSMS();
           if (memcmp(mCGN,  modem_buffer,4)==0) procCGN();
           if (memcmp(mGSN,  modem_buffer,4)==0) procGSN();
           modem_i=0;
