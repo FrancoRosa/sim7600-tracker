@@ -22,13 +22,14 @@ volatile bool flagProcessing = false;
 
 const int modem_size = 180;       // Size of Modem serila buffer
 char modem_buffer[modem_size];    // Modem serial buffer 
-char url_buffer[modem_size];    // Modem serial buffer 
-char command_buffer[modem_size];    // Modem serial buffer 
+char command_buffer[modem_size];  // command to POST coordinates to server 
 char modem_char;                  // Modem serial char
-volatile int modem_i;            // Modem serial index
+volatile int modem_i;             // Modem serial index
 volatile int edges[2];
 
-char memory[20][modem_size];
+const int memory_buffer;
+char memory[memory_buffer][modem_size];
+volatile memory_counter=0;
 // - - - - - - - - - - - - - - - - - - - - - - - 
 const char mOK[]     = "OK";
 const char mERROR[]  = "ERRO";
@@ -59,6 +60,7 @@ char GSN[17];
 
 volatile float lat;
 volatile float lng;
+volatile float spd;
 
 typedef struct {
   char server[100];
@@ -76,10 +78,10 @@ Config settings;
 void checkConfig(){
   settings = storage.read();
   if (settings.valid) {
-    Serial.print("... settings found");
+    Serial.println("... settings found");
   } 
   else {
-    Serial.print("... settings not found");
+    Serial.println("... settings not found");
     const char default_domain[] = "http://iotnetwork.com.au:5055/";
     memcpy(settings.server, default_domain, strlen(default_domain));
     settings.stationary_period = 600;
@@ -88,7 +90,7 @@ void checkConfig(){
     settings.recovery = false;
     settings.valid = true;
     storage.write(settings);
-    Serial.print("... settings saved");
+    Serial.println("... settings saved");
 
   }
 }
@@ -216,22 +218,22 @@ void procCGN() {
   if (modem_buffer[10]==':') {
     if (modem_buffer[12]=='2' || modem_buffer[12]=='3') { // if GNS is fixed
       flagGNS = true;
-      split_chr(latitude, modem_buffer, ',', 4);      Serial.print("... latitude: ");      Serial.println(latitude);
-      split_chr(longitude, modem_buffer, ',', 6);     Serial.print("... longitude: ");     Serial.println(longitude);
-      split_chr(lat_indicator, modem_buffer, ',', 5); Serial.print("... lat_indicator: "); Serial.println(lat_indicator);
-      split_chr(lng_indicator, modem_buffer, ',', 7); Serial.print("... lng_indicador: "); Serial.println(lng_indicator);
+      split_chr(latitude, modem_buffer, ',', 4);      //Serial.print("... latitude: ");      Serial.println(latitude);
+      split_chr(longitude, modem_buffer, ',', 6);     //Serial.print("... longitude: ");     Serial.println(longitude);
+      split_chr(lat_indicator, modem_buffer, ',', 5); //Serial.print("... lat_indicator: "); Serial.println(lat_indicator);
+      split_chr(lng_indicator, modem_buffer, ',', 7); //Serial.print("... lng_indicador: "); Serial.println(lng_indicator);
       lat = to_geo(latitude, lat_indicator);          Serial.print("... lat: ");           Serial.println(lat,6);
       lng = to_geo(longitude, lng_indicator);         Serial.print("... lng: ");           Serial.println(lng,6);
+      spd = atof(speed);                              Serial.print("... spd: ");           Serial.println(spd);
       dtostrf(lat, 7, 6, latitude);
       dtostrf(lng, 7, 6, longitude);
-      split_chr(date, modem_buffer, ',', 8);          Serial.print("... date: ");          Serial.println(date);
-      split_chr(time, modem_buffer, ',', 9);          Serial.print("... time: ");          Serial.println(time);
-      to_date(date);                                  Serial.print("... date: ");          Serial.println(date);
-      to_time(time);                                  Serial.print("... time: ");          Serial.println(time);
-      split_chr(altitude, modem_buffer, ',', 10);     Serial.print("... altitude: ");      Serial.println(altitude);
-      split_chr(speed, modem_buffer, ',', 11);        Serial.print("... speed: ");         Serial.println(speed);
-      split_chr(hdop, modem_buffer, ',', 14);         Serial.print("... hdop: ");          Serial.println(hdop);
-      
+      split_chr(date, modem_buffer, ',', 8);          //Serial.print("... date: ");          Serial.println(date);
+      split_chr(time, modem_buffer, ',', 9);          //Serial.print("... time: ");          Serial.println(time);
+      to_date(date);                                  //Serial.print("... date: ");          Serial.println(date);
+      to_time(time);                                  //Serial.print("... time: ");          Serial.println(time);
+      split_chr(altitude, modem_buffer, ',', 10);     //Serial.print("... altitude: ");      Serial.println(altitude);
+      split_chr(speed, modem_buffer, ',', 11);        //Serial.print("... speed: ");         Serial.println(speed);
+      split_chr(hdop, modem_buffer, ',', 14);         //Serial.print("... hdop: ");          Serial.println(hdop);
     } 
   }
 } 
@@ -260,21 +262,12 @@ bool waitOk(int timeout) {
   return false;
 }
 
-void create_url() {
-  // http://iotnetwork.com.au:5055/?id=863922031635619&lat=-13.20416&lon=-72.20898&timestamp=1624031099&hdop=12&altitude=3400&speed=10
-  sprintf(
-    url_buffer,
-    "%s?id=%s&lat=%s&lon=%s&timestamp=%s%%20%s&hdop=%s&altitude=%s&speed=%s",
-    settings.server, GSN, latitude, longitude, date, time, hdop, altitude, speed
-  );
-}
-
 void create_command() {
   // http://iotnetwork.com.au:5055/?id=863922031635619&lat=-13.20416&lon=-72.20898&timestamp=1624031099&hdop=12&altitude=3400&speed=10
   sprintf(
     command_buffer,
-    "HTTPPARA=\"URL\",\"%s\"",
-    url_buffer
+    "HTTPPARA=\"URL\",\"%s?id=%s&lat=%s&lon=%s&timestamp=%s%%20%s&hdop=%s&altitude=%s&speed=%s\"",
+    settings.server, GSN, latitude, longitude, date, time, hdop, altitude, speed
   );
 }
 
@@ -299,6 +292,22 @@ bool smsConfig() {
   sendCommand("CNMI=2,2", 5);
   return result;
 }
+
+int saveOnMemory(int memory_counter, char *memory, *char command_buffer) {
+  memcpy(memory[memory_counter], command_buffer, strlen(command_buffer));
+  memory_counter++;
+  return memory_counter;
+}
+
+void getLocation() {
+  sendCommand("CGNSSINFO", 10);
+  if(flagGNS){
+    create_command();
+    memory_counter = saveOnMemory(memory_counter, memory, command_buffer);
+  }
+}
+
+
 
 static void task_rx_modem(void *pvParameters) {
   while (true) {
@@ -335,17 +344,22 @@ static void task_tx_modem(void *pvParameters) {
     if (smsConfig()) {
       sendCommand("GSN", 3);
       sendCommand("CMEE=2", 10);
-      sendCommand("CGNSSINFO", 10);
-      digitalWrite(led_pin, !digitalRead(led_pin));
+      while (true) {
+        if (flagLocate){
+          getLocation();
+          flagLocate = false;
+        }
+      }
     }
-    if (flagGNS) {
-      create_url();
-      initHTTP();
-      postHTTP();
-      osDelayS(10);
-      stopHTTP();
-    }
-    osDelayS(50);
+
+    
+    // if (flagGNS) {
+    //   initHTTP();
+    //   postHTTP();
+    //   osDelayS(10);
+    //   stopHTTP();
+    // }
+    // osDelayS(50);
   }
 }
 
@@ -358,7 +372,8 @@ void setup() {
   Serial.begin(230400);
   delay(1000); // keep this to avoid USB crash
   Serial1.begin(115200);
-  delay(1000); // keep this to avoid USB crash
+  delay(5000); // delay to start software
+  Serial.println("... start!");
   checkConfig();
   xTaskCreate(task_tx_modem, "txModem", 512, NULL, tskIDLE_PRIORITY + 2, &Handle_txTask);
   xTaskCreate(task_rx_modem, "rxModem", 512, NULL, tskIDLE_PRIORITY + 1, &Handle_rxTask);
@@ -371,7 +386,41 @@ void setup() {
 }
 
 void loop() {
-  delay(1000);
+  int logging_counter;
+  int upload_counter;
+  int stationary_counter;
+  int recovery_counter;
+  while (true) {
+    delay(1000);
+    logging_counter++;
+    upload_counter++;
+    stationary_counter++;
+    recovery_counter++;
+    
+    if (settings.recovery) {
+      if (recovery_counter >= 10) {
+          recovery_counter = 0;
+          flagLocate = true;
+          flagUpload = true;
+      }
+    } else {
+      if (spd >= 1) {
+        if (logging_counter >= settings.logging_period) {
+          logging_counter = 0;
+          flagLocate = true;
+        }
+      } else {
+        if (stationary_counter >= settings.stationary_period) {
+          stationary_counter = 0;
+          flagLocate = true;
+        }
+      }
+      if (upload_counter >= settings.upload_period) {
+        upload_counter = 0;
+        flagUpload = true;
+      }
+    }
+  }
 }
 
 // find for domain on memory, if not give default.
