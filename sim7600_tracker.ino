@@ -16,7 +16,7 @@ volatile bool flagOK = false;
 volatile bool flagERROR = false;
 volatile bool flagREG = false;
 volatile bool flagGNS = false;
-volatile bool flagHTTPACT = false;
+volatile bool flagHTTP = false;
 volatile bool flagDOWNLOAD = false;
 volatile bool flagProcessing = false;
 
@@ -43,6 +43,7 @@ const char mCGN[] = "+CGN";
 const char mGSN[] = "8639";   // this is SIMCOMS id found on serial number
 const char mRIN[] = "RING"; // when someones makes a call.. it should hang up
 const char mHUP[] = "ATH";  // when someones makes a call.. it should hang up
+const char mHTTP[] = "+HTTP";
 // - - - - - - - - - - - - - - - - - - - - - - - 
 
 TaskHandle_t Handle_rxTask;
@@ -55,6 +56,7 @@ char lat_indicator[2];
 char lng_indicator[2];
 char altitude[7]; 
 char speed[7]; 
+char course[7]; 
 char hdop[7];
 char GSN[17];
 
@@ -87,9 +89,9 @@ void checkConfig(){
     Serial.println("... settings not found");
     const char default_domain[] = "http://iotnetwork.com.au:5055/";
     memcpy(settings.server, default_domain, strlen(default_domain));
-    settings.stationary_period = 20;
-    settings.logging_period = 10;
-    settings.upload_period = 60;
+    settings.stationary_period = 300;
+    settings.logging_period = 30;
+    settings.upload_period = 300;
     settings.recovery = false;
     settings.valid = true;
     storage.write(settings);
@@ -227,7 +229,6 @@ void procCGN() {
       split_chr(lng_indicator, modem_buffer, ',', 7); //Serial.print("... lng_indicador: "); Serial.println(lng_indicator);
       lat = to_geo(latitude, lat_indicator);          Serial.print("... lat: ");           Serial.println(lat,6);
       lng = to_geo(longitude, lng_indicator);         Serial.print("... lng: ");           Serial.println(lng,6);
-      spd = atof(speed);                              Serial.print("... spd: ");           Serial.println(spd);
       dtostrf(lat, 7, 6, latitude);
       dtostrf(lng, 7, 6, longitude);
       split_chr(date, modem_buffer, ',', 8);          //Serial.print("... date: ");          Serial.println(date);
@@ -236,7 +237,9 @@ void procCGN() {
       to_time(time);                                  //Serial.print("... time: ");          Serial.println(time);
       split_chr(altitude, modem_buffer, ',', 10);     //Serial.print("... altitude: ");      Serial.println(altitude);
       split_chr(speed, modem_buffer, ',', 11);        //Serial.print("... speed: ");         Serial.println(speed);
+      split_chr(course, modem_buffer, ',', 12);        //Serial.print("... speed: ");         Serial.println(speed);
       split_chr(hdop, modem_buffer, ',', 14);         //Serial.print("... hdop: ");          Serial.println(hdop);
+      spd = atof(speed);                              Serial.print("... spd: ");           Serial.println(spd);
     } 
   }
 } 
@@ -269,8 +272,8 @@ void create_command() {
   // http://iotnetwork.com.au:5055/?id=863922031635619&lat=-13.20416&lon=-72.20898&timestamp=1624031099&hdop=12&altitude=3400&speed=10
   sprintf(
     command_buffer,
-    "HTTPPARA=\"URL\",\"%s?id=%s&lat=%s&lon=%s&timestamp=%s%%20%s&hdop=%s&altitude=%s&speed=%s\"",
-    settings.server, GSN, latitude, longitude, date, time, hdop, altitude, speed
+    "HTTPPARA=\"URL\",\"%s?id=%s&lat=%s&lon=%s&timestamp=%s%%20%s&hdop=%s&altitude=%s&speed=%s&course=%s\"",
+    settings.server, GSN, latitude, longitude, date, time, hdop, altitude, speed, course
   );
 }
 
@@ -279,9 +282,12 @@ void initHTTP() {
 }
 
 void postHTTP() {
-  create_command();
+  flagHTTP = false;
   sendCommand(command_buffer, 5);
   sendCommand("HTTPACTION=1", 15);
+  while (!flagHTTP) {
+    osDelayMs(100);
+  }
 }
 
 void stopHTTP() {
@@ -303,7 +309,9 @@ int saveOnMemory(int memory_counter, char *command_buffer) {
   }
   memory[memory_counter][len] = 0;
   memory_counter++;
-  if (memory_counter >= memory_buffer) memory_counter = 0;
+  if (memory_counter >= memory_buffer) {
+    flagUpload = true;
+  }
   return memory_counter;
 }
 
@@ -316,20 +324,23 @@ void getLocation() {
 }
 
 void uploadLocation() {
+  initHTTP();
   for (int i = 0; i < memory_counter; i++){
     int z = 0;
-    while (true) {
+    while (z < modem_size ) {
       char c = memory[i][z];
       if (c == 0) {
         break;
       } else {
-        Serial.print(c);
+        command_buffer[z] = c;
       }
       z++;
     }
-    Serial.println("");
+    command_buffer[z] = 0;
+    postHTTP();
   }
   memory_counter = 0;
+  stopHTTP();
 }
 
 
@@ -347,14 +358,11 @@ static void task_rx_modem(void *pvParameters) {
         {
           flagProcessing = true;
           modem_buffer[modem_i]='\0';
-          if (memcmp(mOK,    modem_buffer,2)==0) flagOK=true;
-          if (memcmp(mERROR, modem_buffer,4)==0) flagERROR=true;
-          // if (memcmp(mCLOSED,modem_buffer,4)==0) flagConn=false;
-          // if (memcmp(mSend,  modem_buffer,6)==0) flagSend=true;
-          // if (memcmp(mConn,  modem_buffer,9)==0) flagConn=true;
-          // if (memcmp(mRIN,   modem_buffer,4)==0) flagRIN=true;
-          if (memcmp(mCGN,   modem_buffer,4)==0) procCGN();
-          if (memcmp(mGSN,   modem_buffer,4)==0) procGSN();
+          if (memcmp(mOK,   modem_buffer,2)==0) flagOK=true;
+          if (memcmp(mERROR,modem_buffer,4)==0) flagERROR=true;
+          if (memcmp(mHTTP, modem_buffer,4)==0) flagHTTP=true;
+          if (memcmp(mCGN,  modem_buffer,4)==0) procCGN();
+          if (memcmp(mGSN,  modem_buffer,4)==0) procGSN();
           modem_i=0;
           for(int i = 0; i < modem_size; i++) modem_buffer[i]=0;
           flagProcessing = false;
@@ -378,17 +386,9 @@ static void task_tx_modem(void *pvParameters) {
           uploadLocation();
           flagUpload = false;
         }
-        osDelayS(1);
+        osDelayMs(100);
       }
     }
-
-    
-    // if (flagGNS) {
-    //   initHTTP();
-    //   postHTTP();
-    //   osDelayS(10);
-    //   stopHTTP();
-    // }
     osDelayS(1);
   }
 }
