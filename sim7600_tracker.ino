@@ -31,20 +31,7 @@ const int memory_buffer = 10;
 char memory[memory_buffer][modem_size];
 volatile int memory_counter = 0;
 // - - - - - - - - - - - - - - - - - - - - - - - 
-const char mOK[]     = "OK";
-const char mERROR[]  = "ERRO";
-const char mCLOSED[] = "CLOS";
-const char mCBC[] = "+CBC";
-const char mCOP[] = "+COP";
-const char mCSQ[] = "+CSQ";
-const char mCGR[] = "+CGR";
-const char mIPC[] = "+IPC";
-const char mCGN[] = "+CGN";
-const char mGSN[] = "8639";   // this is SIMCOMS id found on serial number
-const char mRIN[] = "RING"; // when someones makes a call.. it should hang up
-const char mHUP[] = "ATH";  // when someones makes a call.. it should hang up
-const char mHTTP[] = "+HTTP";
-const char mSMS[] = "#*,";
+
 // - - - - - - - - - - - - - - - - - - - - - - - 
 
 TaskHandle_t Handle_rxTask;
@@ -97,7 +84,6 @@ void checkConfig(){
     settings.valid = true;
     storage.write(settings);
     Serial.println("... settings saved");
-
   }
 }
 
@@ -252,11 +238,13 @@ void procSMS() {
   // #*,logging,20,
   // #*,upload,300,
   // #*,recovery,1,
+  // #*,sms,+51984894723,
   const char sSER[] = "serv";
   const char sSTA[] = "stat";
   const char sLOG[] = "logg";
   const char sUPL[] = "uplo";
   const char sREC[] = "reco";
+  const char sSMS[] = "sms";
   char sms_command[12];
   char sms_value[100];
   Serial.println("... processing SMS");
@@ -270,6 +258,7 @@ void procSMS() {
   if (memcmp(sLOG, sms_command, 4) == 0) settings.logging_period = atoi(sms_value);
   if (memcmp(sUPL, sms_command, 4) == 0) settings.upload_period = atoi(sms_value);
   if (memcmp(sREC, sms_command, 4) == 0) settings.recovery = atoi(sms_value);
+  if (memcmp(sSMS, sms_command, 3) == 0) {sendSMS()}
   storage.write(settings);
   Serial.println("... new settings found");
   Serial.print("... server: ");     Serial.println(settings.server);
@@ -382,6 +371,21 @@ void uploadLocation() {
 
 
 static void task_rx_modem(void *pvParameters) {
+  const char mOK[]     = "OK";
+  const char mERROR[]  = "ERRO";
+  const char mCLOSED[] = "CLOS";
+  const char mCBC[] = "+CBC";
+  const char mCOP[] = "+COP";
+  const char mCSQ[] = "+CSQ";
+  const char mCGR[] = "+CGR";
+  const char mIPC[] = "+IPC";
+  const char mCGN[] = "+CGN";
+  const char mGSN[] = "8639";   // this is SIMCOMS id found on serial number
+  const char mRIN[] = "RING"; // when someones makes a call.. it should hang up
+  const char mHUP[] = "ATH";  // when someones makes a call.. it should hang up
+  const char mHTTP[] = "+HTTP";
+  const char mSMS[] = "#*,";
+  
   while (true) {
     while(Serial1.available() && !flagProcessing) {
       modem_char = Serial1.read();
