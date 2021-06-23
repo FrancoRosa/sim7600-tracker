@@ -27,9 +27,9 @@ char modem_char;                  // Modem serial char
 volatile int modem_i;             // Modem serial index
 volatile int edges[2];
 
-const int memory_buffer;
+const int memory_buffer = 10;
 char memory[memory_buffer][modem_size];
-volatile memory_counter=0;
+volatile int memory_counter = 0;
 // - - - - - - - - - - - - - - - - - - - - - - - 
 const char mOK[]     = "OK";
 const char mERROR[]  = "ERRO";
@@ -62,6 +62,9 @@ volatile float lat;
 volatile float lng;
 volatile float spd;
 
+volatile bool flagLocate = false;
+volatile bool flagUpload = false;
+
 typedef struct {
   char server[100];
   int stationary_period;
@@ -84,9 +87,9 @@ void checkConfig(){
     Serial.println("... settings not found");
     const char default_domain[] = "http://iotnetwork.com.au:5055/";
     memcpy(settings.server, default_domain, strlen(default_domain));
-    settings.stationary_period = 600;
-    settings.logging_period = 20;
-    settings.upload_period = 240;
+    settings.stationary_period = 20;
+    settings.logging_period = 10;
+    settings.upload_period = 60;
     settings.recovery = false;
     settings.valid = true;
     storage.write(settings);
@@ -293,9 +296,14 @@ bool smsConfig() {
   return result;
 }
 
-int saveOnMemory(int memory_counter, char *memory, *char command_buffer) {
-  memcpy(memory[memory_counter], command_buffer, strlen(command_buffer));
+int saveOnMemory(int memory_counter, char *command_buffer) {
+  int len = strlen(command_buffer);
+  for (int z = 0; z < len; z++) {
+    memory[memory_counter][z] = command_buffer[z];
+  }
+  memory[memory_counter][len] = 0;
   memory_counter++;
+  if (memory_counter >= memory_buffer) memory_counter = 0;
   return memory_counter;
 }
 
@@ -303,8 +311,25 @@ void getLocation() {
   sendCommand("CGNSSINFO", 10);
   if(flagGNS){
     create_command();
-    memory_counter = saveOnMemory(memory_counter, memory, command_buffer);
+    memory_counter = saveOnMemory(memory_counter, command_buffer);
   }
+}
+
+void uploadLocation() {
+  for (int i = 0; i < memory_counter; i++){
+    int z = 0;
+    while (true) {
+      char c = memory[i][z];
+      if (c == 0) {
+        break;
+      } else {
+        Serial.print(c);
+      }
+      z++;
+    }
+    Serial.println("");
+  }
+  memory_counter = 0;
 }
 
 
@@ -323,7 +348,7 @@ static void task_rx_modem(void *pvParameters) {
           flagProcessing = true;
           modem_buffer[modem_i]='\0';
           if (memcmp(mOK,    modem_buffer,2)==0) flagOK=true;
-          // if (memcmp(mERROR, modem_buffer,4)==0) flagERROR=true;
+          if (memcmp(mERROR, modem_buffer,4)==0) flagERROR=true;
           // if (memcmp(mCLOSED,modem_buffer,4)==0) flagConn=false;
           // if (memcmp(mSend,  modem_buffer,6)==0) flagSend=true;
           // if (memcmp(mConn,  modem_buffer,9)==0) flagConn=true;
@@ -335,7 +360,7 @@ static void task_rx_modem(void *pvParameters) {
           flagProcessing = false;
         }
     }
-   osDelayUs(1);
+   osDelayMs(1);
   }
 }
 
@@ -345,10 +370,15 @@ static void task_tx_modem(void *pvParameters) {
       sendCommand("GSN", 3);
       sendCommand("CMEE=2", 10);
       while (true) {
-        if (flagLocate){
+        if (flagLocate) {
           getLocation();
           flagLocate = false;
         }
+        if (flagUpload) {
+          uploadLocation();
+          flagUpload = false;
+        }
+        osDelayS(1);
       }
     }
 
@@ -359,9 +389,10 @@ static void task_tx_modem(void *pvParameters) {
     //   osDelayS(10);
     //   stopHTTP();
     // }
-    // osDelayS(50);
+    osDelayS(1);
   }
 }
+
 
 void setup() {
   delay(1000); // keep this to avoid USB crash
@@ -386,17 +417,12 @@ void setup() {
 }
 
 void loop() {
-  int logging_counter;
-  int upload_counter;
-  int stationary_counter;
-  int recovery_counter;
+  int logging_counter = 0;
+  int upload_counter = 0;
+  int stationary_counter = 0;
+  int recovery_counter = 0;
+  
   while (true) {
-    delay(1000);
-    logging_counter++;
-    upload_counter++;
-    stationary_counter++;
-    recovery_counter++;
-    
     if (settings.recovery) {
       if (recovery_counter >= 10) {
           recovery_counter = 0;
@@ -420,29 +446,17 @@ void loop() {
         flagUpload = true;
       }
     }
+    logging_counter++;
+    upload_counter++;
+    stationary_counter++;
+    recovery_counter++;
+    Serial.println(".");
+    delay(1000);
   }
 }
-
-// find for domain on memory, if not give default.
-// find for interval on memory, if not, give default.
-
-// Add interval counter and flag
-
-// Stationary Heartbeat - Minutes
-// Motion Logging rate - seconds
-// Motion upload rate - minutes
-// recovery mode, upload every 10s
 
 // set recovery mode flag
 
 // get RTC from IC
 
 // save positions and send at once
-
-// Variables to save in memory 
-// #*,SERVER,http://iotnetwork.com.au:5055/
-// #*,RECOVERY,true
-// #*,RECOVERY,false
-// #*,STATIONARY,1
-// #*,LOGGING,30
-// #*,UPLOAD,5
