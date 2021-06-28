@@ -16,9 +16,11 @@ volatile bool flagOK = false;
 volatile bool flagERROR = false;
 volatile bool flagREG = false;
 volatile bool flagGNS = false;
+volatile bool flagCheckGPS = false;
 volatile bool flagHTTP = false;
 volatile bool flagDOWNLOAD = false;
 volatile bool flagProcessing = false;
+volatile bool flagSendSMS = false;
 
 const int modem_size = 180;       // Size of Modem serila buffer
 char modem_buffer[modem_size];    // Modem serial buffer 
@@ -47,10 +49,11 @@ char speed[7];
 char course[7]; 
 char hdop[7];
 char GSN[17];
+char phone[20];
 
 volatile float lat;
 volatile float lng;
-volatile float spd;
+volatile float spd; // request 
 
 volatile bool flagLocate = false;
 volatile bool flagUpload = false;
@@ -85,6 +88,7 @@ void checkConfig(){
     storage.write(settings);
     Serial.println("... settings saved");
   }
+  printSettings();
 }
 
 // - - - - - - - - Delay Helpers - - - - - - - - 
@@ -231,6 +235,21 @@ void procCGN() {
   }
 }
 
+void sendSMS() {
+  // https://maps.google.com/?q=<lat>,<lng>
+  char ctrl_z = 26;
+  char sms_command[40];
+  char sms_message[140];
+  sprintf(sms_command, "AT+CMGS=\"%s\"\r", phone);
+  sprintf(sms_message, "Track:\n%s %s\nhttps://maps.google.com/?q=%s,%s\nspd: %s\n", date, time, latitude, longitude, speed);
+  Serial.print("... send sms:"); Serial.println(sms_command);
+  Serial.print("... message:"); Serial.println(sms_message);
+  Serial1.print(sms_command);
+  osDelayS(1);
+  Serial1.print(sms_message);
+  Serial1.print(ctrl_z);
+}
+
 void procSMS() {
   // incomming SMS for configuration purposes, examples:
   // #*,server,http://iotnetwork.com.au:5055/,
@@ -245,29 +264,35 @@ void procSMS() {
   const char sUPL[] = "uplo";
   const char sREC[] = "reco";
   const char sSMS[] = "sms";
-  char sms_command[12];
+  char sms_command[40];
   char sms_value[100];
-  Serial.println("... processing SMS");
-
+  bool settingFlag = false;
   split_chr(sms_command, modem_buffer, ',', 1);
   split_chr(sms_value, modem_buffer, ',', 2);
-  Serial.println("... ");Serial.println(sms_command);
-  Serial.println("... ");Serial.println(sms_value);
-  if (memcmp(sSER, sms_command, 4) == 0) memcpy(settings.server, sms_value, strlen(sms_value));
-  if (memcmp(sSTA, sms_command, 4) == 0) settings.stationary_period = atoi(sms_value);
-  if (memcmp(sLOG, sms_command, 4) == 0) settings.logging_period = atoi(sms_value);
-  if (memcmp(sUPL, sms_command, 4) == 0) settings.upload_period = atoi(sms_value);
-  if (memcmp(sREC, sms_command, 4) == 0) settings.recovery = atoi(sms_value);
-  if (memcmp(sSMS, sms_command, 3) == 0) {sendSMS()}
-  storage.write(settings);
-  Serial.println("... new settings found");
+  Serial.println("... SMS command");
+  Serial.print("... command: "); Serial.println(sms_command);
+  Serial.print("... value: "); Serial.println(sms_value);
+  if (memcmp(sSER, sms_command, 4) == 0) {memcpy(settings.server, sms_value, strlen(sms_value)); settingFlag = true;};
+  if (memcmp(sSTA, sms_command, 4) == 0) {settings.stationary_period = atoi(sms_value); settingFlag = true;};
+  if (memcmp(sLOG, sms_command, 4) == 0) {settings.logging_period = atoi(sms_value); settingFlag = true;};
+  if (memcmp(sUPL, sms_command, 4) == 0) {settings.upload_period = atoi(sms_value); settingFlag = true;};
+  if (memcmp(sREC, sms_command, 4) == 0) {settings.recovery = atoi(sms_value); settingFlag = true;};
+  if (memcmp(sSMS, sms_command, 3) == 0) {memcpy(phone, sms_value, strlen(sms_value)); flagSendSMS=true;}
+  if (settingFlag) {
+    storage.write(settings);
+    printSettings();
+    Serial.println("... settings saved");
+    settingFlag=false;
+  }
+} 
+
+void printSettings(){
   Serial.print("... server: ");     Serial.println(settings.server);
   Serial.print("... stationary: "); Serial.println(settings.stationary_period);
   Serial.print("... logging: ");    Serial.println(settings.logging_period);
   Serial.print("... upload: ");     Serial.println(settings.upload_period);
   Serial.print("... recovery: ");   Serial.println(settings.recovery);
-  Serial.println("... settings saved");
-} 
+}
 
 bool sendCommand(const char *command,int timeout) {
   Serial1.print("AT+");
@@ -345,6 +370,7 @@ void getLocation() {
   if(flagGNS){
     create_command();
     memory_counter = saveOnMemory(memory_counter, command_buffer);
+    flagGNS=false;
   }
 }
 
@@ -393,7 +419,6 @@ static void task_rx_modem(void *pvParameters) {
       modem_buffer[modem_i] = modem_char;
       modem_i++;
       if (modem_i >= modem_size) modem_i = 0;
-      // if (modem_char=='>') flagPromt = true;
       if ((modem_i >= 2) && ((modem_char == '\n') || (modem_char == '\n')))
         {
           flagProcessing = true;
@@ -422,10 +447,20 @@ static void task_tx_modem(void *pvParameters) {
         if (flagLocate) {
           getLocation();
           flagLocate = false;
+          flagCheckGPS = false;
         }
         if (flagUpload) {
           uploadLocation();
           flagUpload = false;
+        }
+        if (flagCheckGPS) {
+          sendCommand("CGNSSINFO", 10);
+          flagCheckGPS = false;
+        }
+
+        if (flagSendSMS) {
+          sendSMS();
+          flagSendSMS = false;
         }
         osDelayMs(100);
       }
@@ -462,7 +497,8 @@ void loop() {
   int upload_counter = 0;
   int stationary_counter = 0;
   int recovery_counter = 0;
-  
+  int i = 0;
+
   while (true) {
     if (settings.recovery) {
       if (recovery_counter >= 10) {
@@ -487,17 +523,22 @@ void loop() {
         flagUpload = true;
       }
     }
+
+    if (i >= 10) {
+      i = 0;
+      flagCheckGPS=true;
+    };
+
     logging_counter++;
     upload_counter++;
     stationary_counter++;
     recovery_counter++;
-    Serial.println(".");
+    i++;
+
     delay(1000);
   }
 }
 
 // set recovery mode flag
-
 // get RTC from IC
 
-// save positions and send at once
