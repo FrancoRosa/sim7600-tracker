@@ -236,7 +236,12 @@ void procCGN() {
 }
 
 void sendSMS() {
+  // SMS Format:
+  // Track:
+  // date time
   // https://maps.google.com/?q=<lat>,<lng>
+  // speed
+  
   char ctrl_z = 26;
   char sms_command[40];
   char sms_message[140];
