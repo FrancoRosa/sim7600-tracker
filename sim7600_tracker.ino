@@ -147,6 +147,15 @@ void modemPower() {
   digitalWrite(key_pin, HIGH); osDelayS(10);
 }
 
+void onRF(){
+  sendCommand("CFUN=1", 5);
+  osDelayS(5);
+}
+
+void offRF(){
+  sendCommand("CFUN=0", 5);
+}
+
 // Read modem IMEI
 void procGSN() {
   memcpy(GSN, modem_buffer, 15);
@@ -380,6 +389,7 @@ void getLocation() {
 }
 
 void uploadLocation() {
+  if (spd < 1) onRF();
   initHTTP();
   for (int i = 0; i < memory_counter; i++){
     int z = 0;
@@ -397,6 +407,7 @@ void uploadLocation() {
   }
   memory_counter = 0;
   stopHTTP();
+  if (spd < 1) offRF();
 }
 
 
