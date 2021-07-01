@@ -73,14 +73,20 @@ AT+CNMA|OK|Send ACK to SMS sender
 AT+CGNSSINFO|+CGNSSINFO: 2,06,03,00,3426.693019,S,15051.184731,E,170521,034216.0,46.5,0.0,0.0,1.2,0.9,0.9|
 |GNSS Data|
 
+## Power save mode
+[SIM7600 Series PCIE Hardware Design](https://microchip.ua/simcom/LTE/SIM7500_SIM7600/SIM7600_Series_PCIE_Hardware_Design_V1.03.pdf)
+Command|Response|Description
+-----|-----|-----
+AT+CFUN=1 | OK | Enable RF
+AT+CFUN=0 | OK | Disable RF
 
 ## Usefull extra commands
 [AT commands reference](http://mt-system.ru/sites/default/files/documents/sim7500_sim7600_series_at_command_manual_v2.00.pdf)
 Command|Response|Description
 -----|-----|-----
-AT+CMEE=2 || Enable verbose error codes
-AT+CGMM||Get modem model
-AT+GSN||Get IMEI
+AT+CMEE=2 | OK | Enable verbose error codes
+AT+CGMM|OK |Get modem model
+AT+GSN|OK |Get IMEI
 
 
 
