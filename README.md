@@ -113,12 +113,10 @@ Command|Response|Description
 AT+CMEE=2 | OK | Enable verbose error codes
 AT+CGMM|OK |Get modem model
 AT+GSN|OK |Get IMEI
-
-AT+CGREG?|| Get Network status
-AT+CGREG=1|| register to network
-
-AT+CSQ||Network signal level
-AT+CFUN=6||Reset device
+AT+CGREG?|OK| Get Network status
+AT+CGREG=1|OK| register to network
+AT+CSQ|OK|Network signal level
+AT+CFUN=6|OK|Reset device
 
 ## Hardware Design
 More information about the modem can be found here: [Hardware Design](https://simcom.ee/documents/SIM7600E/SIM7600%20Series%20Hardware%20Design_V1.03.pdf)
